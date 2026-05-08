@@ -1,6 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
+import { lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class CountriesService {
@@ -8,27 +8,30 @@ export class CountriesService {
 
   async getAllCountries() {
     try {
-      // 1. Hacemos la petición a la API pública
-      const url = 'https://restcountries.com/v3.1/all';
-      const response = await firstValueFrom(this.httpService.get(url));
-      const countries = response.data;
-
-      // 2. Transformamos la información según el requerimiento de la prueba
-      const transformedCountries = countries.map((country: any) => {
-        return {
-          nombre: country.name.common,
-          // Algunos países no tienen capital, por eso hacemos esta validación
-          capital: country.capital ? country.capital[0] : 'No tiene',
-          region: country.region,
-          poblacion: country.population,
-          bandera: country.flags.png,
-        };
-      });
-
-      return transformedCountries;
-
-    } catch (error) {
-      throw new HttpException('Error al obtener los países', HttpStatus.INTERNAL_SERVER_ERROR);
+      // Usamos una URL que especifica los campos para que la respuesta sea más ligera
+      const url = 'https://restcountries.com/v3.1/all?fields=name,capital,region,population,flags';
+      
+      const response = await lastValueFrom(
+        this.httpService.get(url, {
+          headers: { 'Accept-Encoding': 'gzip,deflate,compress' } // Ayuda con la compresión de datos
+        })
+      );
+      
+      return response.data.map((country: any) => ({
+        nombre: country.name?.common || 'Sin nombre',
+        capital: country.capital && country.capital.length > 0 ? country.capital[0] : 'N/A',
+        region: country.region || 'N/A',
+        poblacion: country.population || 0,
+        bandera: country.flags?.png || country.flags?.svg || ''
+      }));
+    } catch (error: any) {
+      // Esto imprimirá el error real en tu consola de VS Code para que lo veamos
+      console.error('ERROR DETECTADO:', error.response?.data || error.message);
+      
+      throw new HttpException(
+        `Error API (Status ${error.response?.status}): ${error.message}`, 
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 }
